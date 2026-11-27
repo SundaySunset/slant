@@ -42,6 +42,25 @@ dotnet publish src\ObliqueSeasons.csproj -c Release -r win-x64 --self-contained 
 
 Network requests are made only when **Live Weather** is enabled (to resolve approximate IP geolocation and fetch public forecast data from Open-Meteo). No telemetry, analytics, or account data is ever collected or uploaded; all preferences stay local.
 
+## Contributing & Feedback
+
+Slant is actively maintained and continuously evolving. Suggestions, new window frame ideas, bug reports, and Pull Requests are always welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) or open an Issue anytime.
+
+## Support
+
+Slant is completely free and open-source. If it brings a bit of calm light to your desktop, buying me a coffee is always appreciated (completely optional):
+
+- ☕ [Support on Ko-fi (PayPal)](https://ko-fi.com/sundaysunset)
+
+<details>
+<summary>WeChat Reward (微信赞赏码)</summary>
+
+<p align="left">
+  <img src="assets/wechat-reward.jpg" width="200" alt="WeChat Reward QR Code" />
+</p>
+
+</details>
+
 ## License
 
 Licensed under the [GNU General Public License v3.0 (GPL-3.0)](LICENSE).

@@ -40,7 +40,26 @@ dotnet publish src\ObliqueSeasons.csproj -c Release -r win-x64 --self-contained 
 
 ## 隐私说明
 
-仅在开启「实况天气」时请求公共 IP 定位与 Open-Meteo 天气接口；程序不包含任何遥测、统计上报或账号上传逻辑，所有偏好设置均保存在本机。
+仅在启用「实况天气」时请求公共 IP 定位与 Open-Meteo 天气接口；程序不包含任何遥测、统计上报或账号上传逻辑，所有偏好设置均保存在本机。
+
+## 持续开发与参与贡献
+
+本项目仍在持续开发与优化中，欢迎通过 **Issues** 提出改进建议、反馈 Bug 或分享你希望加入的新窗框样式，也欢迎直接提交 **Pull Request** 参与共建（详见 [CONTRIBUTING.md](CONTRIBUTING.md)）。
+
+## 赞赏支持
+
+寸度完全免费开源；如果它给你的桌面带来了一点安静的陪伴，欢迎请作者喝杯咖啡（完全自愿）：
+
+- ☕ [Ko-fi (PayPal)](https://ko-fi.com/sundaysunset)
+
+<details>
+<summary>展开微信赞赏码</summary>
+
+<p align="left">
+  <img src="assets/wechat-reward.jpg" width="200" alt="微信赞赏码" />
+</p>
+
+</details>
 
 ## 开源协议
 
