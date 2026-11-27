@@ -1,4 +1,4 @@
-# Slant · 寸度
+# Slant
 
 English | [简体中文](README.zh-CN.md)
 
@@ -42,24 +42,20 @@ dotnet publish src\ObliqueSeasons.csproj -c Release -r win-x64 --self-contained 
 
 Network requests are made only when **Live Weather** is enabled (to resolve approximate IP geolocation and fetch public forecast data from Open-Meteo). No telemetry, analytics, or account data is ever collected or uploaded; all preferences stay local.
 
-## Contributing & Feedback
+## Feedback & Ongoing Development
 
-Slant is actively maintained and continuously evolving. Suggestions, new window frame ideas, bug reports, and Pull Requests are always welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) or open an Issue anytime.
+Slant is actively maintained and continuously evolving. Bug reports, feature suggestions, and new window frame ideas are always welcome via **Issues** — see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines (external Pull Requests are not accepted at this time).
 
 ## Support
 
 Slant is completely free and open-source. If it brings a bit of calm light to your desktop, buying me a coffee is always appreciated (completely optional):
 
 - ☕ [Support on Ko-fi (PayPal)](https://ko-fi.com/sundaysunset)
-
-<details>
-<summary>WeChat Reward (微信赞赏码)</summary>
+- 💚 WeChat Reward:
 
 <p align="left">
   <img src="assets/wechat-reward.jpg" width="200" alt="WeChat Reward QR Code" />
 </p>
-
-</details>
 
 ## License
 
