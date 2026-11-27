@@ -8,6 +8,14 @@ A native Windows 10 / 11 real-time circadian window light wallpaper & lock scree
 
 [Watch Demo Video (720p 60fps)](assets/demo.mp4)
 
+## Visual Previews
+
+| Sunrise & Circadian Light | Thunderstorm & Rain |
+| :---: | :---: |
+| ![Sunrise Preview](assets/preview-sunrise.gif) | ![Thunderstorm Preview](assets/preview-thunder.gif) |
+| **Winter Snow & Frost** | **Dusk Window Frames** |
+| ![Snow Preview](assets/preview-snow.gif) | ![Window Frames Preview](assets/preview-windows.gif) |
+
 ## Features
 
 - **Circadian Sunlight & Moonlight**: Simulates natural solar/lunar movement and color temperature across interior walls in real time or accelerated time-lapse — including a three-stage sunrise (cool pre-dawn blush → warm apricot morning → honey-gold), afternoon light, deep amber dusk, and nocturnal moonlight.
