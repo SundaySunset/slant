@@ -16,4 +16,4 @@ A clear description of what happened and what you expected.
 - Mode (Control Window / Live Desktop Wallpaper / Lock Screen / Wallpaper Engine):
 
 **Logs (if applicable)**
-If the app crashed or failed to recover, please attach or paste recent entries from `%LocalAppData%\ObliqueSeasons\crash.log` (avoid sharing any sensitive file paths if needed).
+If the app crashed or failed to recover, please attach or paste recent entries from `%LocalAppData%\Slant\crash.log` (avoid sharing any sensitive file paths if needed).

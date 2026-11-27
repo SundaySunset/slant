@@ -31,7 +31,7 @@ A native Windows 10 / 11 real-time circadian window light wallpaper & lock scree
 - **Build**: Requires .NET 8 SDK. Run [`Build-EXE.bat`](Build-EXE.bat) from the repository root, or publish manually:
 
 ```powershell
-dotnet publish src\ObliqueSeasons.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish_out
+dotnet publish src\Slant.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish_out
 ```
 
 - **CLI Flags**:

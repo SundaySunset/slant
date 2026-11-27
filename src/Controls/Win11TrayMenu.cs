@@ -84,7 +84,7 @@ internal sealed class Win11MenuPalette
 
 /// <summary>
 /// Generates the fallback dark slate-navy squircle with 4 glowing slanted light bars
-/// ("寸度 · 四格斜影") system tray emblem at 4x supersampling when assets/oblique-seasons.ico is unavailable.
+/// ("寸度 · 四格斜影") system tray emblem at 4x supersampling when assets/slant.ico is unavailable.
 /// </summary>
 internal static class TrayIconFactory
 {

@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace ObliqueSeasons.Models;
 
 /// <summary>
-/// Persisted user preferences and wallpaper backup metadata stored under %LocalAppData%\ObliqueSeasons\settings.json.
+/// Persisted user preferences and wallpaper backup metadata stored under %LocalAppData%\Slant\settings.json.
 /// </summary>
 public sealed class AppSettings
 {
@@ -30,7 +30,7 @@ public sealed class AppSettings
 
     public static string DataRootDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "ObliqueSeasons");
+        "Slant");
 
     public static string WallpapersDirectory => Path.Combine(DataRootDirectory, "Wallpapers");
 

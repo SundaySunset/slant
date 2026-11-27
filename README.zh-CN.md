@@ -31,7 +31,7 @@ Windows 10 / 11 原生实时光影动态壁纸与系统锁屏应用（基于 Web
 - **编译方式**：安装 .NET 8 SDK 后，直接运行根目录的 [Build-EXE.bat](Build-EXE.bat)，或执行：
 
 ```powershell
-dotnet publish src\ObliqueSeasons.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish_out
+dotnet publish src\Slant.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish_out
 ```
 
 - **命令行参数**：

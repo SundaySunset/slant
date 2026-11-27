@@ -14,17 +14,17 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Building ObliqueSeasons.exe ^(.NET 8 Windows App^)...
+echo Building Slant.exe ^(.NET 8 Windows App^)...
 set "BUILT=0"
 
 if exist "%USERPROFILE%\.nuget\packages" (
-  dotnet publish "src\ObliqueSeasons.csproj" -c Release -r win-x64 --self-contained false --source "%USERPROFILE%\.nuget\packages" -p:RestorePackagesPath="%USERPROFILE%\.nuget\packages" -o "src\publish"
+  dotnet publish "src\Slant.csproj" -c Release -r win-x64 --self-contained false --source "%USERPROFILE%\.nuget\packages" -p:RestorePackagesPath="%USERPROFILE%\.nuget\packages" -o "src\publish"
   if not errorlevel 1 set "BUILT=1"
 )
 
 if "%BUILT%"=="0" (
   echo Trying online NuGet restore...
-  dotnet publish "src\ObliqueSeasons.csproj" -c Release -r win-x64 --self-contained false -o "src\publish"
+  dotnet publish "src\Slant.csproj" -c Release -r win-x64 --self-contained false -o "src\publish"
   if not errorlevel 1 set "BUILT=1"
 )
 
@@ -34,19 +34,19 @@ if "%BUILT%"=="0" (
   exit /b 1
 )
 
-if not exist "src\publish\ObliqueSeasons.exe" (
-  echo [ERROR] Published executable not found: src\publish\ObliqueSeasons.exe
+if not exist "src\publish\Slant.exe" (
+  echo [ERROR] Published executable not found: src\publish\Slant.exe
   if "%NO_PAUSE%"=="0" pause
   exit /b 1
 )
 
-copy /Y "src\publish\ObliqueSeasons.exe" "ObliqueSeasons.exe" >nul
+copy /Y "src\publish\Slant.exe" "Slant.exe" >nul
 if errorlevel 1 (
-  echo [ERROR] Failed to copy ObliqueSeasons.exe. Make sure the app is not currently running.
+  echo [ERROR] Failed to copy Slant.exe. Make sure the app is not currently running.
   if "%NO_PAUSE%"=="0" pause
   exit /b 1
 )
 
 rmdir /s /q "src\publish" >nul 2>nul
-echo [OK] ObliqueSeasons.exe built successfully.
+echo [OK] Slant.exe built successfully.
 endlocal

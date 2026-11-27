@@ -8,7 +8,8 @@ namespace ObliqueSeasons.Services;
 internal static class AutoStartService
 {
     private const string RunRegPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string ValueName = "ObliqueSeasonsWallpaper";
+    private const string ValueName = "SlantWallpaper";
+    private const string LegacyValueName = "ObliqueSeasonsWallpaper";
 
     public static bool IsEnabled()
     {
@@ -37,10 +38,12 @@ internal static class AutoStartService
         {
             string exePath = Environment.ProcessPath ?? Application.ExecutablePath;
             key.SetValue(ValueName, $"\"{exePath}\" --autostart", RegistryValueKind.String);
+            key.DeleteValue(LegacyValueName, false);
         }
         else
         {
             key.DeleteValue(ValueName, false);
+            key.DeleteValue(LegacyValueName, false);
         }
     }
 }

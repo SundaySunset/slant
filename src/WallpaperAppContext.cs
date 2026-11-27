@@ -183,7 +183,7 @@ internal sealed class WallpaperAppContext : ApplicationContext
         int sizePx = Math.Clamp(SystemInformation.SmallIconSize.Width, 16, 64);
         try
         {
-            string icoPath = Path.Combine(AppContext.BaseDirectory, "assets", "oblique-seasons.ico");
+            string icoPath = Path.Combine(AppContext.BaseDirectory, "assets", "slant.ico");
             if (File.Exists(icoPath))
             {
                 return new Icon(icoPath, sizePx, sizePx);
@@ -212,7 +212,7 @@ internal sealed class WallpaperAppContext : ApplicationContext
     {
         try
         {
-            string icoPath = Path.Combine(AppContext.BaseDirectory, "assets", "oblique-seasons.ico");
+            string icoPath = Path.Combine(AppContext.BaseDirectory, "assets", "slant.ico");
             if (File.Exists(icoPath))
             {
                 return new Icon(icoPath);
