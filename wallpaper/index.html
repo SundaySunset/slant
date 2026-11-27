@@ -260,6 +260,7 @@
     .oobe-quick-card {
       padding: 10px 12px; border-radius: 12px;
       border: 1px solid rgba(224, 236, 229, 0.09); background: rgba(255, 255, 255, 0.028);
+      display: flex; flex-direction: column; gap: 10px;
     }
     .oobe-bento {
       display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
@@ -659,6 +660,7 @@
     .host-only { display: none; }
     body.is-win-host .host-only { display: block; }
     body.is-win-host .collapse-reveal.host-only { display: grid; }
+    body.is-win-host .toggle-row.host-only,
     body.is-win-host .panel-footer.host-only { display: flex; }
     body.is-win-host .tool-btn.host-only,
     body.is-win-host .tab-btn.host-only { display: inline-flex; }
@@ -867,8 +869,14 @@
               <strong id="ov-lang" class="oobe-tile-val">—</strong>
             </div>
           </div>
-          <div class="oobe-quick-card host-only">
+          <div class="oobe-quick-card">
             <label class="toggle-row">
+              <span class="toggle-info">
+                <span data-i18n="locationConsentLabel">定位同步时区与天气</span>
+              </span>
+              <input id="chk-oobe-location" class="switch-input" type="checkbox" />
+            </label>
+            <label class="toggle-row host-only">
               <span class="toggle-info">
                 <span data-i18n="autoStartLabel">开机自动启动</span>
               </span>
@@ -2463,6 +2471,16 @@
           wxLiveLocked: '实况锁定',
           wxCustomCity: '手动城市',
           wxManualMode: '手动模式',
+          locationConsentLabel: '定位同步时区与天气',
+          wxNoLocation: '未授予定位',
+          wxLocalClockBadge: '本机时间',
+          wxNoLocationDetail: '当前使用本机时间与晴朗微风；授予定位后将自动同步当地时区与实时天气（也可直接搜索城市）',
+          btnGrantLocation: '授予定位',
+          btnGrantLocationTitle: '允许获取当前位置以同步当地时区与实时天气',
+          ovLocalClockTag: '本机',
+          ovWeatherNeedLoc: '未授予定位 · 晴朗',
+          toastLocGranted: '已授予定位，正在同步当地时区与实时天气…',
+          toastLocRevoked: '已关闭定位，已切回本机时间与默认晴朗',
           citySearchPlaceholder: '输入城市名搜索（如 杭州 / Tokyo）',
           btnCitySearch: '搜索',
           btnCitySearching: '搜索中…',
@@ -2524,7 +2542,7 @@
           toastReset: '已恢复默认配置',
           toastManualOffReset: '已关闭手动调节并恢复默认配置',
           toastHostOnly: '请在 Windows 桌面程序窗口中使用「设置系统桌面与锁屏」',
-          toastWxSynced: (city, desc, wind) => `已同步本机实况（${city}）：${desc} · 风速 ${wind} m/s`,
+          toastWxSynced: (city, desc, wind, tz) => tz ? `已同步实况（${city} · ${tz}）：${desc} · 风速 ${wind} m/s` : `已同步实况（${city}）：${desc} · 风速 ${wind} m/s`,
           toastWxFail: '未能获取本机天气，已切换至手动调节模式',
           toastFps: (fps) => `已限制帧率上限为 ${fps} FPS`,
           toastSeason: (lbl) => `已切换：${lbl}`,
@@ -2643,6 +2661,16 @@
           wxLiveLocked: 'Live Synced',
           wxCustomCity: 'Custom City',
           wxManualMode: 'Manual',
+          locationConsentLabel: 'Location (Timezone & Weather)',
+          wxNoLocation: 'Location Not Granted',
+          wxLocalClockBadge: 'Local Clock',
+          wxNoLocationDetail: 'Following your local system clock and calm breeze. Allow location to sync local timezone & live weather, or search a city below.',
+          btnGrantLocation: 'Allow Location',
+          btnGrantLocationTitle: 'Allow location access to sync local timezone and live weather',
+          ovLocalClockTag: 'Local',
+          ovWeatherNeedLoc: 'Location Off · Clear',
+          toastLocGranted: 'Location granted — syncing local timezone & live weather…',
+          toastLocRevoked: 'Location disabled — switched back to local system clock',
           citySearchPlaceholder: 'Search city (e.g. Tokyo, London)',
           btnCitySearch: 'Search',
           btnCitySearching: 'Searching…',
@@ -2704,7 +2732,7 @@
           toastReset: 'Restored default configuration',
           toastManualOffReset: 'Manual tuning off · Defaults restored',
           toastHostOnly: 'Use the Windows Desktop app to set Desktop & Lock Screen',
-          toastWxSynced: (city, desc, wind) => `Synced live weather (${city}): ${desc} · Wind ${wind} m/s`,
+          toastWxSynced: (city, desc, wind, tz) => tz ? `Synced live weather (${city} · ${tz}): ${desc} · Wind ${wind} m/s` : `Synced live weather (${city}): ${desc} · Wind ${wind} m/s`,
           toastWxFail: 'Could not fetch local weather; manual controls unlocked',
           toastFps: (fps) => `Frame rate capped at ${fps} FPS`,
           toastSeason: (lbl) => `Switched to ${lbl}`,
@@ -2753,8 +2781,59 @@
         return val !== undefined ? val : (I18N.zh[key] ?? key);
       }
 
+      function canRunLiveWeatherFetch() {
+        return typeof state !== 'undefined' && state.weatherMode === 'live'
+          && (state.weatherCityMode === 'custom' || Boolean(state.locationGranted));
+      }
+
+      function isLocationTimezoneActive() {
+        return canRunLiveWeatherFetch()
+          && Boolean(state.weather && state.weather.loaded)
+          && state.weather.utcOffsetSeconds != null
+          && Number.isFinite(state.weather.utcOffsetSeconds);
+      }
+
+      function formatUtcOffset(offsetSec) {
+        if (offsetSec == null || !Number.isFinite(offsetSec)) return '';
+        const totalMin = Math.round(Number(offsetSec) / 60);
+        const sign = totalMin >= 0 ? '+' : '-';
+        const absMin = Math.abs(totalMin);
+        const h = Math.floor(absMin / 60);
+        const m = absMin % 60;
+        return m === 0 ? `UTC${sign}${h}` : `UTC${sign}${h}:${String(m).padStart(2, '0')}`;
+      }
+
+      function getRealtimeClockInfo(nowMs = Date.now()) {
+        if (isLocationTimezoneActive()) {
+          const offsetSec = Number(state.weather.utcOffsetSeconds);
+          const shifted = new Date(nowMs + offsetSec * 1000);
+          return {
+            hour: shifted.getUTCHours() + shifted.getUTCMinutes() / 60 + shifted.getUTCSeconds() / 3600,
+            month: shifted.getUTCMonth(),
+            isLocatedTz: true,
+            utcOffsetSeconds: offsetSec,
+            timezone: state.weather.timezone || '',
+            utcLabel: formatUtcOffset(offsetSec)
+          };
+        }
+        const d = new Date(nowMs);
+        const localOffsetSec = -d.getTimezoneOffset() * 60;
+        return {
+          hour: d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600,
+          month: d.getMonth(),
+          isLocatedTz: false,
+          utcOffsetSeconds: localOffsetSec,
+          timezone: '',
+          utcLabel: formatUtcOffset(localOffsetSec)
+        };
+      }
+
       function detectSystemSeason() {
-        const m = new Date().getMonth();
+        const clk = getRealtimeClockInfo();
+        let m = clk.month;
+        if (isLocationTimezoneActive() && state.weather.lat != null && Number.isFinite(state.weather.lat) && state.weather.lat < 0) {
+          m = (m + 6) % 12;
+        }
         return m >= 2 && m <= 4 ? 'spring' : (m >= 5 && m <= 7 ? 'summer' : (m >= 8 && m <= 10 ? 'autumn' : 'winter'));
       }
 
@@ -2763,6 +2842,7 @@
         windowSize: 1.00, sharpness: 1.30, mullionMode: 8, sunsetDrama: 1.20, passingClouds: true,
         seasonMode: 'auto', treeSeed: 82417, foliageDensity: 0.68, wallMat: 0, wallTex: 0.48,
         weatherMode: 'live', weatherEnabled: true, manualWeatherType: 'clear', rainIntensity: 0.85, baseWindMs: 2.3,
+        locationGranted: false,
         weatherCityMode: 'auto', customCityName: '', customCityLat: null, customCityLon: null,
         dustEnabled: true, birdEnabled: true,
         fpsCap: 35,
@@ -2799,6 +2879,7 @@
           if (['clear', 'rain', 'thunder', 'snow'].includes(p.manualWeatherType)) m.manualWeatherType = p.manualWeatherType;
           if (Number.isFinite(p.baseWindMs)) m.baseWindMs = clamp(p.baseWindMs, 0.0, 10.0);
           if (Number.isFinite(p.rainIntensity)) m.rainIntensity = clamp(p.rainIntensity, 0.30, 1.30);
+          if (typeof p.locationGranted === 'boolean') m.locationGranted = p.locationGranted;
           if (p.weatherCityMode === 'custom' && Number.isFinite(p.customCityLat) && Number.isFinite(p.customCityLon)
             && Math.abs(p.customCityLat) <= 90 && Math.abs(p.customCityLon) <= 180) {
             m.weatherCityMode = 'custom';
@@ -2826,7 +2907,9 @@
         lastWinBounds: { cx: 0, cy: 0, halfW: 0.58, halfH: 0.58 },
         weather: {
           loaded: false, loading: false, source: '', city: '',
-          lat: null, lon: null, tempC: null, windMs: 2.3, gustMs: 3.8, cloudPct: 18,
+          lat: null, lon: null, tempC: null,
+          utcOffsetSeconds: null, timezone: '', timezoneAbbrev: '',
+          windMs: 2.3, gustMs: 3.8, cloudPct: 18,
           precipMm: 0.0, rainMm: 0.0, snowfallCm: 0.0, weatherCode: 0,
           weatherType: 'clear', livePrecipIntensity: 0.0, descKey: 'clear', descText: '晴朗', error: ''
         },
@@ -2850,15 +2933,35 @@
         }
         return 'auto';
       }
+      function clearLiveWeatherState(clearCache = false) {
+        Object.assign(state.weather, {
+          loaded: false, loading: false, source: '', city: '',
+          lat: null, lon: null, tempC: null,
+          utcOffsetSeconds: null, timezone: '', timezoneAbbrev: '',
+          windMs: 2.3, gustMs: 3.8, cloudPct: 18,
+          precipMm: 0.0, rainMm: 0.0, snowfallCm: 0.0, weatherCode: 0,
+          weatherType: 'clear', livePrecipIntensity: 0.0, descKey: 'clear', descText: '晴朗', error: ''
+        });
+        if (clearCache) {
+          try { localStorage.removeItem(WEATHER_CACHE_KEY); } catch (_) {}
+        }
+        if (state.timeMode === 'realtime') {
+          state.hour = getRealtimeClockInfo().hour;
+        }
+      }
       function applyCachedWeatherPayload(payload, snapDamped = false) {
         if (!payload || typeof payload !== 'object') return false;
         Object.assign(state.weather, {
           loaded: true, loading: false,
           source: payload.source || 'ip',
-          lat: Number.isFinite(payload.lat) ? Number(payload.lat) : null,
-          lon: Number.isFinite(payload.lon) ? Number(payload.lon) : null,
+          lat: (payload.lat != null && Number.isFinite(Number(payload.lat))) ? Number(payload.lat) : null,
+          lon: (payload.lon != null && Number.isFinite(Number(payload.lon))) ? Number(payload.lon) : null,
           city: typeof payload.city === 'string' ? payload.city : '',
           tempC: payload.tempC != null ? Number(payload.tempC) : null,
+          utcOffsetSeconds: (payload.utcOffsetSeconds != null && Number.isFinite(Number(payload.utcOffsetSeconds)))
+            ? Number(payload.utcOffsetSeconds) : null,
+          timezone: typeof payload.timezone === 'string' ? payload.timezone : '',
+          timezoneAbbrev: typeof payload.timezoneAbbrev === 'string' ? payload.timezoneAbbrev : '',
           windMs: Math.max(0, Number(payload.windMs ?? 2.3)),
           gustMs: Math.max(0, Number(payload.gustMs ?? 3.8)),
           cloudPct: clamp(Number(payload.cloudPct ?? 18), 0, 100),
@@ -2872,6 +2975,9 @@
           descText: typeof payload.descText === 'string' ? payload.descText : '晴朗',
           error: ''
         });
+        if (state.timeMode === 'realtime') {
+          state.hour = getRealtimeClockInfo().hour;
+        }
         if (snapDamped && typeof getTargetEnvironment === 'function') {
           const env = getTargetEnvironment();
           state.damped.cloudPct       = env.targetCloudPct;
@@ -2907,6 +3013,7 @@
           scope: getWeatherCacheScope(),
           source: w.source || 'ip',
           lat: w.lat, lon: w.lon, city: w.city, tempC: w.tempC,
+          utcOffsetSeconds: w.utcOffsetSeconds, timezone: w.timezone, timezoneAbbrev: w.timezoneAbbrev,
           windMs: w.windMs, gustMs: w.gustMs, cloudPct: w.cloudPct,
           precipMm: w.precipMm, rainMm: w.rainMm, snowfallCm: w.snowfallCm,
           weatherCode: w.weatherCode, weatherType: w.weatherType,
@@ -2928,6 +3035,7 @@
           wallMat: state.wallMat, wallTex: state.wallTex,
           weatherMode: state.weatherMode, weatherEnabled: state.weatherMode !== 'off', manualWeatherType: state.manualWeatherType,
           baseWindMs: state.baseWindMs, rainIntensity: state.rainIntensity,
+          locationGranted: Boolean(state.locationGranted),
           weatherCityMode: state.weatherCityMode, customCityName: state.customCityName,
           customCityLat: state.customCityLat, customCityLon: state.customCityLon,
           dustEnabled: state.dustEnabled, birdEnabled: state.birdEnabled,
@@ -4407,7 +4515,7 @@
       }
 
       async function fetchOpenMeteo(lat, lon, cityLabel, source = 'ip') {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&current=temperature_2m,wind_speed_10m,wind_gusts_10m,cloud_cover,precipitation,rain,showers,snowfall,weather_code&wind_speed_unit=ms`;
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&current=temperature_2m,wind_speed_10m,wind_gusts_10m,cloud_cover,precipitation,rain,showers,snowfall,weather_code&wind_speed_unit=ms&timezone=auto`;
         let data;
         try {
           data = await fetchJson(url, 6500);
@@ -4416,6 +4524,7 @@
           data = await fetchJson(url, 6500);
         }
         if (!data || !data.current) throw new Error('Weather API error');
+        if (!canRunLiveWeatherFetch()) return;
         const cur = data.current;
         const precipMm = Math.max(0, Number(cur.precipitation ?? 0));
         const rainMm = Math.max(0, Number(cur.rain ?? 0));
@@ -4426,15 +4535,26 @@
         const gustMs = Math.max(windMs, Number(cur.wind_gusts_10m ?? (windMs * 1.45)));
         const cloudPct = clamp(Number(cur.cloud_cover ?? 18), 0, 100);
         const tempC = cur.temperature_2m != null ? Number(cur.temperature_2m) : null;
+        const utcOffsetSeconds = (data.utc_offset_seconds != null && Number.isFinite(Number(data.utc_offset_seconds)))
+          ? Number(data.utc_offset_seconds) : null;
+        const timezone = typeof data.timezone === 'string' ? data.timezone : '';
+        const timezoneAbbrev = typeof data.timezone_abbreviation === 'string' ? data.timezone_abbreviation : '';
         const cls = classifyWmoWeather(wCode, precipMm, rainMm, showersMm, snowfallCm);
 
         Object.assign(state.weather, {
           loaded: true, loading: false, source, lat, lon, city: localizeCityLabel(cityLabel), tempC,
+          utcOffsetSeconds, timezone, timezoneAbbrev,
           windMs, gustMs, cloudPct, precipMm: Math.max(precipMm, rainMm + showersMm),
           rainMm: rainMm + showersMm, snowfallCm, weatherCode: wCode,
           weatherType: cls.weatherType, livePrecipIntensity: cls.intensity, descKey: cls.descKey, descText: cls.descText, error: ''
         });
         saveCachedWeather(true);
+        if (state.timeMode === 'realtime') {
+          state.hour = getRealtimeClockInfo().hour;
+        }
+        if (state.seasonMode === 'auto' && typeof sceneAssetsPrepared !== 'undefined' && sceneAssetsPrepared && treeScene.season !== getActiveSeason()) {
+          if (typeof rebuildAndRenderTree === 'function') rebuildAndRenderTree();
+        }
       }
 
       const CITY_PRESETS = [
@@ -4512,10 +4632,19 @@
       }
 
       async function autoLocateAndFetchWeather(silent = false) {
+        if (!canRunLiveWeatherFetch()) {
+          state.weather.loading = false;
+          renderWeatherUI();
+          return;
+        }
         if (silent) {
           const cachedWx = loadCachedWeather(10 * 60 * 1000);
           if (cachedWx) {
+            const prevSeason = getActiveSeason();
             applyCachedWeatherPayload(cachedWx, false);
+            if (state.seasonMode === 'auto' && typeof sceneAssetsPrepared !== 'undefined' && sceneAssetsPrepared && getActiveSeason() !== prevSeason) {
+              if (typeof rebuildAndRenderTree === 'function') rebuildAndRenderTree();
+            }
             syncUI();
             return;
           }
@@ -4555,9 +4684,9 @@
           await withTimeout(runPipeline(), 12000, 'Weather timeout');
           if (reqId !== weatherReqSeq) return;
           syncUI();
-          if (!silent) {
+          if (!silent && state.weather.loaded) {
             const w = state.weather;
-            showToast(t('toastWxSynced', w.city || t('wxLocalPos'), getWeatherDescText(w), w.windMs.toFixed(1)), 2400);
+            showToast(t('toastWxSynced', w.city || t('wxLocalPos'), getWeatherDescText(w), w.windMs.toFixed(1), formatUtcOffset(w.utcOffsetSeconds)), 2400);
           }
         } catch (_) {
           if (reqId !== weatherReqSeq) return;
@@ -5187,6 +5316,7 @@
         autoLocateAndFetchWeather(false);
       }
       function resetCityToAuto() {
+        state.locationGranted = true;
         state.weatherCityMode = 'auto';
         state.customCityName = '';
         state.customCityLat = null;
@@ -5305,6 +5435,9 @@
             windMs: state.weather.windMs
           };
         }
+        if (state.weatherMode === 'live' && !canRunLiveWeatherFetch()) {
+          return { active: false, locked: false, type: 'clear', precipInt: 0.0, windMs: 1.6 };
+        }
         return {
           active: true, locked: false,
           type: state.manualWeatherType,
@@ -5329,6 +5462,7 @@
           wxDetail.textContent = t('wxDetectingDetail');
           btnLocate.disabled = true;
           btnLocate.textContent = t('btnLocateBusy');
+          btnLocate.title = t('btnLocateTitle');
           return;
         }
         btnLocate.disabled = false;
@@ -5337,7 +5471,10 @@
           wxLockBadge.textContent = (w.source === 'custom' || state.weatherCityMode === 'custom') ? t('wxCustomCity') : t('wxLiveLocked');
           wxLockBadge.classList.add('locked');
           btnLocate.textContent = t('btnLocate');
+          btnLocate.title = t('btnLocateTitle');
           const tempTxt = w.tempC != null ? `${Math.round(w.tempC)}°C · ` : '';
+          const tzStr = formatUtcOffset(w.utcOffsetSeconds);
+          const tzPrefix = tzStr ? `${tzStr} · ` : '';
           const desc = getWeatherDescText(w);
           const lang = getActiveLang();
           let precipTxt = t('wxNoPrecip');
@@ -5349,13 +5486,21 @@
             precipTxt = w.precipMm > 0.05 ? (lang === 'en' ? `Rain ${w.precipMm.toFixed(1)} mm/h` : `降雨 ${w.precipMm.toFixed(1)} mm/h`) : desc;
           }
           wxDetail.textContent = lang === 'en'
-            ? `${desc} · ${tempTxt}Wind ${w.windMs.toFixed(1)} m/s · Clouds ${Math.round(w.cloudPct)}% · ${precipTxt}`
-            : `${desc} · ${tempTxt}风速 ${w.windMs.toFixed(1)} m/s · 云量 ${Math.round(w.cloudPct)}% · ${precipTxt}`;
+            ? `${tzPrefix}${desc} · ${tempTxt}Wind ${w.windMs.toFixed(1)} m/s · Clouds ${Math.round(w.cloudPct)}% · ${precipTxt}`
+            : `${tzPrefix}${desc} · ${tempTxt}风速 ${w.windMs.toFixed(1)} m/s · 云量 ${Math.round(w.cloudPct)}% · ${precipTxt}`;
+        } else if (!canRunLiveWeatherFetch()) {
+          wxCity.textContent = t('wxNoLocation');
+          wxLockBadge.textContent = t('wxLocalClockBadge');
+          wxLockBadge.classList.remove('locked');
+          btnLocate.textContent = t('btnGrantLocation');
+          btnLocate.title = t('btnGrantLocationTitle');
+          wxDetail.textContent = t('wxNoLocationDetail');
         } else {
           wxCity.textContent = t('wxUnavailable');
           wxLockBadge.textContent = t('wxManualMode');
           wxLockBadge.classList.remove('locked');
           btnLocate.textContent = t('btnLocateRetry');
+          btnLocate.title = t('btnLocateTitle');
           wxDetail.textContent = w.error || t('wxUnavailableDetail');
         }
       }
@@ -5366,7 +5511,15 @@
         const sMeta = SEASON_META[activeSeason][lang];
         const tmodeKey = state.timeMode === 'fullDay' ? 'tmodeFullDay' : (state.timeMode === 'realtime' ? 'tmodeRealtime' : 'tmodeManual');
 
-        if (ovTime) ovTime.textContent = `${t(tmodeKey)} · ${formatHour(state.hour)}`;
+        if (ovTime) {
+          if (state.timeMode === 'realtime') {
+            const clk = getRealtimeClockInfo();
+            const tzBadge = clk.isLocatedTz ? (clk.utcLabel || t('ovLocalClockTag')) : t('ovLocalClockTag');
+            ovTime.textContent = `${t(tmodeKey)} · ${formatHour(state.hour)} (${tzBadge})`;
+          } else {
+            ovTime.textContent = `${t(tmodeKey)} · ${formatHour(state.hour)}`;
+          }
+        }
         if (ovSeason) {
           ovSeason.textContent = state.seasonMode === 'auto'
             ? `${sMeta.label} (${t('seasonAuto')})`
@@ -5380,6 +5533,8 @@
           } else if (state.weatherMode === 'live' && state.weather.loaded) {
             const cityPrefix = state.weather.city ? `${state.weather.city} · ` : '';
             ovWeather.textContent = `${cityPrefix}${getWeatherDescText(state.weather)} · ${state.weather.windMs.toFixed(1)} m/s`;
+          } else if (state.weatherMode === 'live' && !canRunLiveWeatherFetch()) {
+            ovWeather.textContent = t('ovWeatherNeedLoc');
           } else if (state.weatherMode === 'live') {
             ovWeather.textContent = `${t('wmodeLive')} (${t('wxManualMode')})`;
           } else {
@@ -5465,6 +5620,9 @@
         const isLiveLocked = wx.locked;
 
         if (chkManualTuning) chkManualTuning.checked = Boolean(state.manualTuning);
+        if (typeof oobeLocationChk !== 'undefined' && oobeLocationChk) {
+          oobeLocationChk.checked = Boolean(state.locationGranted || state.weatherCityMode === 'custom');
+        }
         setActiveTab(activeTabId);
         langBtns.forEach(b => b.classList.toggle('active', b.dataset.lang === state.langMode));
 
@@ -5480,7 +5638,7 @@
         valWeatherSys.textContent = t(state.weatherMode === 'live' ? 'wmodeLive' : (state.weatherMode === 'manual' ? 'wmodeManual' : 'wmodeOff'));
         setRevealOpen(weatherBlock, state.weatherMode !== 'off');
         setRevealOpen(weatherLiveWrap, state.weatherMode === 'live');
-        setRevealOpen(weatherManualWrap, state.weatherMode === 'manual' || (state.weatherMode === 'live' && !isLiveLocked));
+        setRevealOpen(weatherManualWrap, state.weatherMode === 'manual' || (state.weatherMode === 'live' && !isLiveLocked && Boolean(state.weather.error)));
 
         weatherTypeBtns.forEach(b => {
           b.classList.toggle('active', b.dataset.wtype === wx.type);
@@ -5761,7 +5919,7 @@
           lightningEngine.reset();
           showToast(t('toastWmodeOff'), 1800);
         } else if (nextMode === 'live') {
-          if (!state.weather.loaded && !state.weather.loading) {
+          if (canRunLiveWeatherFetch() && !state.weather.loaded && !state.weather.loading) {
             autoLocateAndFetchWeather(true);
           }
           showToast(t('toastWmodeLive'), 1800);
@@ -5786,7 +5944,15 @@
         showToast(t('toastFps', state.fpsCap), 1600);
       }));
 
-      btnLocate.addEventListener('click', () => autoLocateAndFetchWeather(false));
+      btnLocate.addEventListener('click', () => {
+        if (state.weatherCityMode === 'auto' && !state.locationGranted) {
+          state.locationGranted = true;
+          syncUI();
+          scheduleSaveConfig();
+          showToast(t('toastLocGranted'), 2000);
+        }
+        autoLocateAndFetchWeather(false);
+      });
       if (btnCitySearch && inputCitySearch) {
         btnCitySearch.addEventListener('click', () => searchCities(inputCitySearch.value));
         inputCitySearch.addEventListener('keydown', e => {
@@ -5857,12 +6023,9 @@
       }
 
       function restoreDefaultSettings({ toastKey = 'toastReset', broadcast = true } = {}) {
-        const hadCustomCity = state.weatherCityMode === 'custom' || state.weather.source === 'custom';
-        const d = new Date();
-        Object.assign(state, DEFAULT_CONFIG, {
-          hour: d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600,
-          manualTuning: false
-        });
+        weatherReqSeq++;
+        Object.assign(state, DEFAULT_CONFIG, { manualTuning: false });
+        clearLiveWeatherState(true);
         if (inputCitySearch) inputCitySearch.value = '';
         hideCityResults();
         if (btnAdvOptics) btnAdvOptics.setAttribute('aria-expanded', 'false');
@@ -5876,9 +6039,6 @@
         if (typeof ensureProgramForMode === 'function') ensureProgramForMode(state.mullionMode, isDirectorMode).catch(() => {});
         rebuildAndRenderTree(); updateRoomGeometry(); applyTranslations(); syncUI();
         if (panelBody) panelBody.scrollTop = 0;
-        if (state.weatherMode === 'live' && (hadCustomCity || (!state.weather.loaded && !state.weather.loading))) {
-          autoLocateAndFetchWeather(true);
-        }
         try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
         if (broadcast && syncChannel) {
           try { syncChannel.postMessage({ type: 'reset' }); } catch (_) {}
@@ -6295,7 +6455,7 @@
       });
 
       function getTargetEnvironment() {
-        if (state.weatherMode === 'off') {
+        if (state.weatherMode === 'off' || (state.weatherMode === 'live' && !state.weather.loaded && !canRunLiveWeatherFetch())) {
           return {
             targetMeanMs: 1.6, targetGustMs: 1.4, targetWindCap: 6.5,
             targetCloudPct: 16.0, targetCloudSoft: 1.0 + 0.16 * 0.48,
@@ -6377,6 +6537,7 @@
         if (lastTelemetry.time !== timeStr) {
           lastTelemetry.time = timeStr;
           valTime.textContent = timeStr;
+          updateOverviewSummary();
         }
         if (lastTelemetry.phase !== cel.phaseLabel) {
           lastTelemetry.phase = cel.phaseLabel;
@@ -6426,8 +6587,7 @@
 
         let activeHour = state.hour;
         if (state.timeMode === 'realtime') {
-          const d = new Date();
-          activeHour = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600;
+          activeHour = getRealtimeClockInfo().hour;
           state.hour = activeHour;
         } else if (state.timeMode === 'fullDay' && !state.isPaused) {
           state.hour = (state.hour + (24.0 / 120.0) * state.speed * dt) % 24.0;
@@ -6676,6 +6836,7 @@
       const hostDesktopSyncEl = $('val-host-desktop-sync');
       const hostOpenLockSettingsBtn = $('btn-host-open-lock-settings');
       const hostOpenBgSettingsBtn = $('btn-host-open-bg-settings');
+      const oobeLocationChk = $('chk-oobe-location');
       const oobeAutoStartChk = $('chk-oobe-autostart');
       const hostAutoStartChk = $('chk-host-autostart');
       const hostFullscreenPauseChk = $('chk-host-fullscreen-pause');
@@ -6751,6 +6912,37 @@
         syncAllSegIndicators();
       };
 
+      if (oobeLocationChk) {
+        oobeLocationChk.addEventListener('change', e => {
+          if (e.target.checked) {
+            state.locationGranted = true;
+            state.weatherMode = 'live';
+            state.weatherEnabled = true;
+            syncUI();
+            scheduleSaveConfig();
+            showToast(t('toastLocGranted'), 2000);
+            autoLocateAndFetchWeather(false);
+          } else {
+            weatherReqSeq++;
+            state.locationGranted = false;
+            state.weatherCityMode = 'auto';
+            state.customCityName = '';
+            state.customCityLat = null;
+            state.customCityLon = null;
+            if (inputCitySearch) inputCitySearch.value = '';
+            hideCityResults();
+            const prevSeason = getActiveSeason();
+            clearLiveWeatherState(true);
+            if (state.seasonMode === 'auto' && sceneAssetsPrepared && getActiveSeason() !== prevSeason) {
+              rebuildAndRenderTree();
+            }
+            syncUI();
+            scheduleSaveConfig();
+            showToast(t('toastLocRevoked'), 2000);
+          }
+        });
+      }
+
       if (isHostMode && !isDesktopWallpaperMode) {
         hostDesktopModeBtns.forEach(b => b.addEventListener('click', () => sendHostCommand('setDesktopMode', { mode: b.dataset.dmode })));
         if (hostRestoreDesktopBtn) hostRestoreDesktopBtn.addEventListener('click', () => sendHostCommand('restoreOriginalDesktop'));
@@ -6779,7 +6971,8 @@
       function applyExternalConfig(p) {
         if (!p || typeof p !== 'object') return;
         const prevSeason = state.seasonMode, prevSeed = state.treeSeed, prevDens = state.foliageDensity, prevWin = state.windowSize, prevLang = state.langMode, prevMullion = state.mullionMode;
-        const prevWMode = state.weatherMode, prevCityMode = state.weatherCityMode, prevCityLat = state.customCityLat, prevCityLon = state.customCityLon, prevCityName = state.customCityName;
+        const prevWMode = state.weatherMode, prevLocGranted = state.locationGranted, prevCityMode = state.weatherCityMode, prevCityLat = state.customCityLat, prevCityLon = state.customCityLon, prevCityName = state.customCityName;
+        const prevEffectiveSeason = getActiveSeason();
         if (['fullDay', 'realtime', 'manual'].includes(p.timeMode)) state.timeMode = p.timeMode;
         if (Number.isFinite(p.hour)) state.hour = ((p.hour % 24) + 24) % 24;
         if (Number.isFinite(p.speed)) state.speed = clamp(p.speed, 0.2, 10.0);
@@ -6802,6 +6995,7 @@
         if (['clear', 'rain', 'thunder', 'snow'].includes(p.manualWeatherType)) state.manualWeatherType = p.manualWeatherType;
         if (Number.isFinite(p.baseWindMs)) state.baseWindMs = clamp(p.baseWindMs, 0.0, 10.0);
         if (Number.isFinite(p.rainIntensity)) state.rainIntensity = clamp(p.rainIntensity, 0.30, 1.30);
+        if (typeof p.locationGranted === 'boolean') state.locationGranted = p.locationGranted;
         if (p.weatherCityMode === 'auto') {
           state.weatherCityMode = 'auto';
           state.customCityName = '';
@@ -6820,15 +7014,21 @@
         if (typeof p.manualTuning === 'boolean') state.manualTuning = p.manualTuning;
         if (['auto', 'zh', 'en'].includes(p.langMode)) state.langMode = p.langMode;
         if (state.mullionMode !== prevMullion) ensureProgramForMode(state.mullionMode, isDirectorMode).catch(() => {});
-        if (state.seasonMode !== prevSeason || state.treeSeed !== prevSeed || state.foliageDensity !== prevDens) rebuildAndRenderTree();
         if (state.windowSize !== prevWin) updateRoomGeometry();
         if (state.langMode !== prevLang) applyTranslations();
         const cityChanged = state.weatherCityMode !== prevCityMode
           || state.customCityLat !== prevCityLat
           || state.customCityLon !== prevCityLon
           || state.customCityName !== prevCityName;
-        if (state.weatherMode === 'live' && (cityChanged || (prevWMode !== 'live' && !state.weather.loaded))) {
+        const locChanged = state.locationGranted !== prevLocGranted;
+        if (!canRunLiveWeatherFetch()) {
+          weatherReqSeq++;
+          clearLiveWeatherState(false);
+        } else if (cityChanged || locChanged || (prevWMode !== 'live' && !state.weather.loaded)) {
           autoLocateAndFetchWeather(true);
+        }
+        if (state.seasonMode !== prevSeason || state.treeSeed !== prevSeed || state.foliageDensity !== prevDens || getActiveSeason() !== prevEffectiveSeason) {
+          rebuildAndRenderTree();
         }
         syncUI();
       }
@@ -6842,18 +7042,23 @@
             if (!msg || typeof msg !== 'object') return;
             if (msg.type === 'config') applyExternalConfig(msg.payload);
             else if (msg.type === 'weather') {
-              if (applyCachedWeatherPayload(msg.payload, false)) syncUI();
+              if (canRunLiveWeatherFetch()) {
+                const prevSeason = getActiveSeason();
+                if (applyCachedWeatherPayload(msg.payload, false)) {
+                  if (state.seasonMode === 'auto' && sceneAssetsPrepared && getActiveSeason() !== prevSeason) {
+                    rebuildAndRenderTree();
+                  }
+                  syncUI();
+                }
+              }
             }
             else if (msg.type === 'reset') {
-              const hadCustomCity = state.weatherCityMode === 'custom' || state.weather.source === 'custom';
-              const d = new Date();
-              Object.assign(state, DEFAULT_CONFIG, {
-                hour: d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600
-              });
+              weatherReqSeq++;
+              Object.assign(state, DEFAULT_CONFIG);
+              clearLiveWeatherState(false);
               windEngine.reset(); cloudEngine.reset(); lightningEngine.reset();
               ensureProgramForMode(state.mullionMode, isDirectorMode).catch(() => {});
               rebuildAndRenderTree(); updateRoomGeometry(); applyTranslations(); syncUI();
-              if (state.weatherMode === 'live' && hadCustomCity) autoLocateAndFetchWeather(true);
             } else if (msg.type === 'triggerBird') {
               state.birdEnabled = true;
               setPaused(false, false);
@@ -6921,25 +7126,36 @@
           requestAnimationFrame(() => requestAnimationFrame(animate));
         }
         if (!isDesktopWallpaperMode) scheduleIdleBehavior();
-        if (state.weatherMode === 'live') autoLocateAndFetchWeather(true);
+        if (canRunLiveWeatherFetch()) autoLocateAndFetchWeather(true);
         schedulePrewarmMullions(600);
         if (!weatherIntervalStarted) {
           weatherIntervalStarted = true;
           setInterval(() => {
             if (
-              state.weatherMode === 'live' && state.weather.loaded && !state.weather.loading &&
+              canRunLiveWeatherFetch() && state.weather.loaded && !state.weather.loading &&
               state.weather.source !== 'native' && state.weather.lat != null && state.weather.lon != null &&
               (typeof navigator === 'undefined' || navigator.onLine !== false)
             ) {
               const cachedWx = loadCachedWeather(10 * 60 * 1000);
               if (cachedWx) {
+                const prevSeason = getActiveSeason();
                 applyCachedWeatherPayload(cachedWx, false);
+                if (state.seasonMode === 'auto' && sceneAssetsPrepared && getActiveSeason() !== prevSeason) {
+                  rebuildAndRenderTree();
+                }
                 syncUI();
                 return;
               }
               const reqId = ++weatherReqSeq;
               fetchOpenMeteo(state.weather.lat, state.weather.lon, state.weather.city, state.weather.source)
-                .then(() => { if (reqId === weatherReqSeq) syncUI(); })
+                .then(() => {
+                  if (reqId === weatherReqSeq) {
+                    if (state.seasonMode === 'auto' && sceneAssetsPrepared && treeScene.season !== getActiveSeason()) {
+                      rebuildAndRenderTree();
+                    }
+                    syncUI();
+                  }
+                })
                 .catch(() => {
                   if (reqId !== weatherReqSeq) return;
                   state.weather.loaded = false;
@@ -6961,7 +7177,7 @@
 
       function bootstrapRenderer({ sync = false } = {}) {
         try {
-          if (state.weatherMode === 'live') {
+          if (canRunLiveWeatherFetch()) {
             const cachedWx = loadCachedWeather();
             if (cachedWx) {
               applyCachedWeatherPayload(cachedWx, true);

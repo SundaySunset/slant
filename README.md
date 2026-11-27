@@ -40,7 +40,7 @@ dotnet publish src\Slant.csproj -c Release -r win-x64 --self-contained false -p:
 
 ## Privacy
 
-Network requests are made only when **Live Weather** is enabled (to resolve approximate IP geolocation and fetch public forecast data from Open-Meteo). No telemetry, analytics, or account data is ever collected or uploaded; all preferences stay local.
+Network requests are made only after you grant location access or select a city manually (to resolve approximate geolocation and fetch public timezone and forecast data from Open-Meteo). By default, Slant follows your local system clock completely offline. No telemetry, analytics, or account data is ever collected or uploaded; all preferences stay local.
 
 ## Feedback & Ongoing Development
 
