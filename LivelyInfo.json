@@ -1,0 +1,14 @@
+{
+  "AppVersion": "2.0.0.0",
+  "Title": "寸度 · Slant",
+  "Thumbnail": "preview.jpg",
+  "Preview": "preview.jpg",
+  "Desc": "实时三维光学窗影动态壁纸（四季叶影 / 阵风 / 实况天气 / 窗棂投影）",
+  "Author": "Slant",
+  "License": "",
+  "Contact": "",
+  "Type": 1,
+  "FileName": "wallpaper/index.html",
+  "Arguments": "",
+  "IsAbsolutePath": false
+}

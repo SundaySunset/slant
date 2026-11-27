@@ -1,0 +1,18 @@
+{
+  "contentrating": "Everyone",
+  "description": "实时三维光学窗影动态壁纸，支持四季叶影、阵风摆动、雨雪雷暴与窗棂光斑投影。",
+  "file": "wallpaper/index.html",
+  "general": {
+    "properties": {}
+  },
+  "preview": "preview.jpg",
+  "tags": [
+    "Nature",
+    "Relaxing",
+    "Abstract",
+    "Minimalist"
+  ],
+  "title": "寸度 · Slant",
+  "type": "web",
+  "version": 1
+}

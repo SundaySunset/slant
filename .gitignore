@@ -1,0 +1,20 @@
+# Build & IDE artifacts
+src/bin/
+src/obj/
+publish_tmp/
+.vs/
+*.user
+*.suo
+
+# Local tooling / agent state
+.agents/
+
+# Compiled binaries & large launch media
+ObliqueSeasons.exe
+*.mp4
+Cundu_Slant_Poster.png
+
+# Logs & OS metadata
+*.log
+Thumbs.db
+.DS_Store
