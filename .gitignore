@@ -12,6 +12,7 @@ publish_tmp/
 # Compiled binaries & large launch media
 ObliqueSeasons.exe
 *.mp4
+!assets/demo.mp4
 Cundu_Slant_Poster.png
 
 # Logs & OS metadata
