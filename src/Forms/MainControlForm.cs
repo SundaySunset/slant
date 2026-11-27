@@ -602,6 +602,20 @@ internal sealed class MainControlForm : Form
         }
     }
 
+    public async Task DeliverHostIpGeoAsync(string jsonPayload)
+    {
+        if (IsDisposed || !IsRendererReady || _webView.CoreWebView2 is null) return;
+        try
+        {
+            await _webView.CoreWebView2.ExecuteScriptAsync(
+                $"window.obliqueResolveHostIpGeo && window.obliqueResolveHostIpGeo({jsonPayload});");
+        }
+        catch
+        {
+            // Ignore transient script errors during close or navigation.
+        }
+    }
+
     public Task<(byte[] Bytes, string Extension)> CaptureSnapshotAsync(int width, int height)
     {
         return WebViewEnvironmentHost.CaptureSnapshotFromWebViewAsync(_webView, width, height);

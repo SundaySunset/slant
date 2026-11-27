@@ -4245,9 +4245,62 @@
         });
       }
 
-      function fetchIpLocation(timeoutMs = 2200) {
+      const pendingHostIpGeo = new Map();
+      let hostIpGeoSeq = 0;
+      window.obliqueResolveHostIpGeo = function (res) {
+        if (!res || !Number.isInteger(res.reqId)) return;
+        const entry = pendingHostIpGeo.get(res.reqId);
+        if (!entry) return;
+        pendingHostIpGeo.delete(res.reqId);
+        entry(res);
+      };
+
+      async function fetchHostDomesticCity(timeoutMs = 2600) {
+        if (!(isHostMode && !isDesktopWallpaperMode && window.chrome && window.chrome.webview)) return null;
+        const reqId = ++hostIpGeoSeq;
+        const raw = await new Promise((resolve) => {
+          const timer = setTimeout(() => {
+            pendingHostIpGeo.delete(reqId);
+            resolve(null);
+          }, timeoutMs);
+          pendingHostIpGeo.set(reqId, (res) => {
+            clearTimeout(timer);
+            resolve(res);
+          });
+          sendHostCommand('requestHostIpGeo', { reqId });
+        });
+        if (!raw || !raw.ok) return null;
+
+        const lang = getActiveLang();
+        const preset = matchPresetCity(raw.city) || matchPresetCity(raw.province);
+        if (preset) {
+          return {
+            lat: preset.lat,
+            lon: preset.lon,
+            city: lang === 'en' ? preset.en : preset.zh
+          };
+        }
+
+        const qName = raw.city || raw.province;
+        if (!qName) return null;
+        try {
+          const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(qName)}&count=1&language=zh&format=json`;
+          const geo = await fetchJson(geoUrl, 5500);
+          const first = geo && Array.isArray(geo.results) ? geo.results[0] : null;
+          if (first && Number.isFinite(Number(first.latitude)) && Number.isFinite(Number(first.longitude))) {
+            return {
+              lat: Number(first.latitude),
+              lon: Number(first.longitude),
+              city: localizeCityLabel(qName)
+            };
+          }
+        } catch (_) {}
+        return null;
+      }
+
+      function fetchIpLocation(timeoutMs = 5500) {
         const makeCtrl = () => (typeof AbortController !== 'undefined' ? new AbortController() : null);
-        const ctrls = [makeCtrl(), makeCtrl(), makeCtrl()];
+        const ctrls = [makeCtrl(), makeCtrl(), makeCtrl(), makeCtrl()];
         const abortRemaining = (winnerIdx) => {
           for (let i = 0; i < ctrls.length; i++) {
             if (i !== winnerIdx && ctrls[i]) {
@@ -4257,28 +4310,36 @@
         };
         const tasks = [
           async (signal) => {
+            const d = await fetchJson('https://api.ip.sb/geoip', timeoutMs, signal);
+            if (d && d.latitude != null && d.longitude != null) {
+              const lat = parseFloat(d.latitude), lon = parseFloat(d.longitude);
+              if (isFinite(lat) && isFinite(lon)) return { lat, lon, city: localizeCityLabel(d.city || d.region || d.country || '本机位置') };
+            }
+            throw new Error('ipsb invalid');
+          },
+          async (signal) => {
             const d = await fetchJson('https://get.geojs.io/v1/ip/geo.json', timeoutMs, signal);
             if (d && d.latitude && d.longitude) {
               const lat = parseFloat(d.latitude), lon = parseFloat(d.longitude);
-              if (isFinite(lat) && isFinite(lon)) return { lat, lon, city: d.city || d.region || d.country || '本机位置' };
+              if (isFinite(lat) && isFinite(lon)) return { lat, lon, city: localizeCityLabel(d.city || d.region || d.country || '本机位置') };
             }
             throw new Error('geojs invalid');
-          },
-          async (signal) => {
-            const d = await fetchJson('https://ipapi.co/json/', timeoutMs, signal);
-            if (d && d.latitude && d.longitude) {
-              const lat = parseFloat(d.latitude), lon = parseFloat(d.longitude);
-              if (isFinite(lat) && isFinite(lon)) return { lat, lon, city: d.city || d.region || d.country_name || '本机位置' };
-            }
-            throw new Error('ipapi invalid');
           },
           async (signal) => {
             const d = await fetchJson('https://ipwho.is/', timeoutMs, signal);
             if (d && d.success !== false && d.latitude && d.longitude) {
               const lat = parseFloat(d.latitude), lon = parseFloat(d.longitude);
-              if (isFinite(lat) && isFinite(lon)) return { lat, lon, city: d.city || d.region || d.country || '本机位置' };
+              if (isFinite(lat) && isFinite(lon)) return { lat, lon, city: localizeCityLabel(d.city || d.region || d.country || '本机位置') };
             }
             throw new Error('ipwho invalid');
+          },
+          async (signal) => {
+            const d = await fetchJson('https://ipapi.co/json/', timeoutMs, signal);
+            if (d && d.latitude && d.longitude) {
+              const lat = parseFloat(d.latitude), lon = parseFloat(d.longitude);
+              if (isFinite(lat) && isFinite(lon)) return { lat, lon, city: localizeCityLabel(d.city || d.region || d.country_name || '本机位置') };
+            }
+            throw new Error('ipapi invalid');
           }
         ];
         return withTimeout(new Promise((resolve, reject) => {
@@ -4296,7 +4357,7 @@
               if (pending === 0 && !resolved) reject(new Error('无法自动定位'));
             });
           });
-        }), timeoutMs + 200, 'IP locate timeout').finally(() => {
+        }), timeoutMs + 250, 'IP locate timeout').finally(() => {
           abortRemaining(-1);
         });
       }
@@ -4347,7 +4408,13 @@
 
       async function fetchOpenMeteo(lat, lon, cityLabel, source = 'ip') {
         const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&current=temperature_2m,wind_speed_10m,wind_gusts_10m,cloud_cover,precipitation,rain,showers,snowfall,weather_code&wind_speed_unit=ms`;
-        const data = await fetchJson(url, 3200);
+        let data;
+        try {
+          data = await fetchJson(url, 6500);
+        } catch (_) {
+          await new Promise(r => setTimeout(r, 150));
+          data = await fetchJson(url, 6500);
+        }
         if (!data || !data.current) throw new Error('Weather API error');
         const cur = data.current;
         const precipMm = Math.max(0, Number(cur.precipitation ?? 0));
@@ -4362,7 +4429,7 @@
         const cls = classifyWmoWeather(wCode, precipMm, rainMm, showersMm, snowfallCm);
 
         Object.assign(state.weather, {
-          loaded: true, loading: false, source, lat, lon, city: cityLabel, tempC,
+          loaded: true, loading: false, source, lat, lon, city: localizeCityLabel(cityLabel), tempC,
           windMs, gustMs, cloudPct, precipMm: Math.max(precipMm, rainMm + showersMm),
           rainMm: rainMm + showersMm, snowfallCm, weatherCode: wCode,
           weatherType: cls.weatherType, livePrecipIntensity: cls.intensity, descKey: cls.descKey, descText: cls.descText, error: ''
@@ -4373,8 +4440,8 @@
       const CITY_PRESETS = [
         { zh: '北京', en: 'Beijing', regionZh: '中国', regionEn: 'China', lat: 39.9042, lon: 116.4074, quick: true },
         { zh: '上海', en: 'Shanghai', regionZh: '中国', regionEn: 'China', lat: 31.2304, lon: 121.4737, quick: true },
-        { zh: '广州', en: 'Guangzhou', regionZh: '中国', regionEn: 'China', lat: 23.1291, lon: 113.2644, quick: true },
-        { zh: '深圳', en: 'Shenzhen', regionZh: '中国', regionEn: 'China', lat: 22.5431, lon: 114.0579, quick: true },
+        { zh: '广州', en: 'Guangzhou', regionZh: '中国 · 广东', regionEn: 'Guangdong, China', lat: 23.1291, lon: 113.2644, quick: true },
+        { zh: '深圳', en: 'Shenzhen', regionZh: '中国 · 广东', regionEn: 'Guangdong, China', lat: 22.5431, lon: 114.0579, quick: true },
         { zh: '杭州', en: 'Hangzhou', regionZh: '中国 · 浙江', regionEn: 'Zhejiang, China', lat: 30.2741, lon: 120.1551, quick: true },
         { zh: '成都', en: 'Chengdu', regionZh: '中国 · 四川', regionEn: 'Sichuan, China', lat: 30.5728, lon: 104.0668, quick: true },
         { zh: '东京', en: 'Tokyo', regionZh: '日本', regionEn: 'Japan', lat: 35.6762, lon: 139.6503, quick: true },
@@ -4387,7 +4454,32 @@
         { zh: '厦门', en: 'Xiamen', regionZh: '中国 · 福建', regionEn: 'Fujian, China', lat: 24.4798, lon: 118.0894, quick: false },
         { zh: '青岛', en: 'Qingdao', regionZh: '中国 · 山东', regionEn: 'Shandong, China', lat: 36.0671, lon: 120.3826, quick: false },
         { zh: '长沙', en: 'Changsha', regionZh: '中国 · 湖南', regionEn: 'Hunan, China', lat: 28.2282, lon: 112.9388, quick: false },
+        { zh: '天津', en: 'Tianjin', regionZh: '中国', regionEn: 'China', lat: 39.0842, lon: 117.2010, quick: false },
+        { zh: '郑州', en: 'Zhengzhou', regionZh: '中国 · 河南', regionEn: 'Henan, China', lat: 34.7466, lon: 113.6253, quick: false },
+        { zh: '合肥', en: 'Hefei', regionZh: '中国 · 安徽', regionEn: 'Anhui, China', lat: 31.8206, lon: 117.2272, quick: false },
+        { zh: '福州', en: 'Fuzhou', regionZh: '中国 · 福建', regionEn: 'Fujian, China', lat: 26.0745, lon: 119.2965, quick: false },
+        { zh: '济南', en: 'Jinan', regionZh: '中国 · 山东', regionEn: 'Shandong, China', lat: 36.6512, lon: 117.1201, quick: false },
+        { zh: '宁波', en: 'Ningbo', regionZh: '中国 · 浙江', regionEn: 'Zhejiang, China', lat: 29.8683, lon: 121.5440, quick: false },
+        { zh: '无锡', en: 'Wuxi', regionZh: '中国 · 江苏', regionEn: 'Jiangsu, China', lat: 31.4912, lon: 120.3119, quick: false },
+        { zh: '大连', en: 'Dalian', regionZh: '中国 · 辽宁', regionEn: 'Liaoning, China', lat: 38.9140, lon: 121.6147, quick: false },
+        { zh: '沈阳', en: 'Shenyang', regionZh: '中国 · 辽宁', regionEn: 'Liaoning, China', lat: 41.8057, lon: 123.4315, quick: false },
+        { zh: '哈尔滨', en: 'Harbin', regionZh: '中国 · 黑龙江', regionEn: 'Heilongjiang, China', lat: 45.8038, lon: 126.5350, quick: false },
+        { zh: '长春', en: 'Changchun', regionZh: '中国 · 吉林', regionEn: 'Jilin, China', lat: 43.8171, lon: 125.3235, quick: false },
+        { zh: '昆明', en: 'Kunming', regionZh: '中国 · 云南', regionEn: 'Yunnan, China', lat: 24.8801, lon: 102.8329, quick: false },
+        { zh: '贵阳', en: 'Guiyang', regionZh: '中国 · 贵州', regionEn: 'Guizhou, China', lat: 26.6477, lon: 106.6302, quick: false },
+        { zh: '南宁', en: 'Nanning', regionZh: '中国 · 广西', regionEn: 'Guangxi, China', lat: 22.8170, lon: 108.3665, quick: false },
+        { zh: '海口', en: 'Haikou', regionZh: '中国 · 海南', regionEn: 'Hainan, China', lat: 20.0440, lon: 110.1983, quick: false },
+        { zh: '太原', en: 'Taiyuan', regionZh: '中国 · 山西', regionEn: 'Shanxi, China', lat: 37.8706, lon: 112.5489, quick: false },
+        { zh: '石家庄', en: 'Shijiazhuang', regionZh: '中国 · 河北', regionEn: 'Hebei, China', lat: 38.0428, lon: 114.5149, quick: false },
+        { zh: '南昌', en: 'Nanchang', regionZh: '中国 · 江西', regionEn: 'Jiangxi, China', lat: 28.6820, lon: 115.8579, quick: false },
+        { zh: '兰州', en: 'Lanzhou', regionZh: '中国 · 甘肃', regionEn: 'Gansu, China', lat: 36.0611, lon: 103.8343, quick: false },
+        { zh: '乌鲁木齐', en: 'Urumqi', regionZh: '中国 · 新疆', regionEn: 'Xinjiang, China', lat: 43.8256, lon: 87.6168, quick: false },
+        { zh: '呼和浩特', en: 'Hohhot', regionZh: '中国 · 内蒙古', regionEn: 'Inner Mongolia, China', lat: 40.8424, lon: 111.7492, quick: false },
+        { zh: '银川', en: 'Yinchuan', regionZh: '中国 · 宁夏', regionEn: 'Ningxia, China', lat: 38.4872, lon: 106.2309, quick: false },
+        { zh: '西宁', en: 'Xining', regionZh: '中国 · 青海', regionEn: 'Qinghai, China', lat: 36.6171, lon: 101.7782, quick: false },
+        { zh: '拉萨', en: 'Lhasa', regionZh: '中国 · 西藏', regionEn: 'Tibet, China', lat: 29.6525, lon: 91.1721, quick: false },
         { zh: '香港', en: 'Hong Kong', regionZh: '中国', regionEn: 'China', lat: 22.3193, lon: 114.1694, quick: false },
+        { zh: '澳门', en: 'Macau', regionZh: '中国', regionEn: 'China', lat: 22.1987, lon: 113.5439, quick: false },
         { zh: '台北', en: 'Taipei', regionZh: '中国台湾', regionEn: 'Taiwan', lat: 25.0330, lon: 121.5654, quick: false },
         { zh: '新加坡', en: 'Singapore', regionZh: '新加坡', regionEn: 'Singapore', lat: 1.3521, lon: 103.8198, quick: false },
         { zh: '首尔', en: 'Seoul', regionZh: '韩国', regionEn: 'South Korea', lat: 37.5665, lon: 126.9780, quick: false },
@@ -4396,6 +4488,28 @@
         { zh: '旧金山', en: 'San Francisco', regionZh: '美国', regionEn: 'United States', lat: 37.7749, lon: -122.4194, quick: false },
         { zh: '巴黎', en: 'Paris', regionZh: '法国', regionEn: 'France', lat: 48.8566, lon: 2.3522, quick: false }
       ];
+
+      function normalizeCityKey(rawName) {
+        return String(rawName || '')
+          .trim()
+          .replace(/(?:特别行政区|自治区|市|省)$/u, '')
+          .replace(/\s+/g, ' ')
+          .toLowerCase();
+      }
+      function matchPresetCity(rawName) {
+        const key = normalizeCityKey(rawName);
+        if (!key) return null;
+        return CITY_PRESETS.find(p =>
+          normalizeCityKey(p.zh) === key ||
+          normalizeCityKey(p.en) === key ||
+          normalizeCityKey(p.en).replace(/['\s-]/g, '') === key.replace(/['\s-]/g, '')
+        ) || null;
+      }
+      function localizeCityLabel(rawName) {
+        const preset = matchPresetCity(rawName);
+        if (preset) return getActiveLang() === 'en' ? preset.en : preset.zh;
+        return String(rawName || '').trim();
+      }
 
       async function autoLocateAndFetchWeather(silent = false) {
         if (silent) {
@@ -4420,22 +4534,25 @@
               await fetchOpenMeteo(state.customCityLat, state.customCityLon, state.customCityName || t('wxLocalPos'), 'custom');
               return;
             }
-            const ipPromise = fetchIpLocation(2200).catch(() => null);
-            let loc = null, src = 'ip';
-            try {
-              const pos = await getBrowserGeo(1500);
-              src = 'geo';
-              let city = `${pos.lat.toFixed(2)}°, ${pos.lon.toFixed(2)}°`;
-              const ip = await withTimeout(ipPromise, 700, 'City timeout').catch(() => null);
-              if (ip && ip.city && Math.hypot(ip.lat - pos.lat, ip.lon - pos.lon) < 2.0) city = ip.city;
-              loc = { lat: pos.lat, lon: pos.lon, city };
-            } catch (_) {
-              loc = await ipPromise;
+            let loc = await fetchHostDomesticCity(2600).catch(() => null);
+            let src = 'ip';
+            if (!loc) {
+              const ipPromise = fetchIpLocation(5500).catch(() => null);
+              try {
+                const pos = await getBrowserGeo(1500);
+                src = 'geo';
+                let city = `${pos.lat.toFixed(2)}°, ${pos.lon.toFixed(2)}°`;
+                const ip = await withTimeout(ipPromise, 1200, 'City timeout').catch(() => null);
+                if (ip && ip.city && Math.hypot(ip.lat - pos.lat, ip.lon - pos.lon) < 2.0) city = ip.city;
+                loc = { lat: pos.lat, lon: pos.lon, city };
+              } catch (_) {
+                loc = await ipPromise;
+              }
             }
             if (!loc) throw new Error('Geo unavailable');
             await fetchOpenMeteo(loc.lat, loc.lon, loc.city, src);
           };
-          await withTimeout(runPipeline(), 4500, 'Weather timeout');
+          await withTimeout(runPipeline(), 12000, 'Weather timeout');
           if (reqId !== weatherReqSeq) return;
           syncUI();
           if (!silent) {
@@ -5135,7 +5252,7 @@
         }
         try {
           const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=${lang}&format=json`;
-          const data = await fetchJson(url, 3200);
+          const data = await fetchJson(url, 6000);
           if (seq !== citySearchSeq) return;
           const remote = Array.isArray(data && data.results) ? data.results.map(r => {
             const name = r.name || q;

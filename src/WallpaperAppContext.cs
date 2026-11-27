@@ -86,6 +86,7 @@ internal sealed class WallpaperAppContext : ApplicationContext
     private readonly FullscreenWatcher _fullscreenWatcher;
     private readonly System.Windows.Forms.Timer _lockSyncTimer;
     private readonly HostMessageWindow _messageWindow;
+    private static readonly HttpClient GeoHttpClient = new() { Timeout = TimeSpan.FromSeconds(3.5) };
 
     private readonly bool _launchedMinimized;
     private MainControlForm? _mainForm;
@@ -567,11 +568,59 @@ internal sealed class WallpaperAppContext : ApplicationContext
                 case "saveScreenshot":
                     await SaveScreenshotAsync();
                     break;
+
+                case "requestHostIpGeo":
+                    int reqId = payload.TryGetProperty("reqId", out JsonElement reqEl) && reqEl.TryGetInt32(out int parsedReq)
+                        ? parsedReq
+                        : 0;
+                    _ = HandleRequestHostIpGeoAsync(reqId);
+                    break;
             }
         }
         catch (Exception ex)
         {
             NotifyUser(string.Format(S.ToastOperationFailedFormat, ex.Message), showBalloonIfHidden: true);
+        }
+    }
+
+    private async Task HandleRequestHostIpGeoAsync(int reqId)
+    {
+        string resultJson = JsonSerializer.Serialize(new { ok = false, reqId });
+        try
+        {
+            using HttpResponseMessage resp = await GeoHttpClient.GetAsync("https://r.inews.qq.com/api/ip2city");
+            if (resp.IsSuccessStatusCode)
+            {
+                string raw = await resp.Content.ReadAsStringAsync();
+                using JsonDocument doc = JsonDocument.Parse(raw);
+                JsonElement root = doc.RootElement;
+                int ret = root.TryGetProperty("ret", out JsonElement retEl) && retEl.TryGetInt32(out int r) ? r : -1;
+                string country = root.TryGetProperty("country", out JsonElement cEl) ? (cEl.GetString() ?? string.Empty).Trim() : string.Empty;
+                string province = root.TryGetProperty("province", out JsonElement pEl) ? (pEl.GetString() ?? string.Empty).Trim() : string.Empty;
+                string city = root.TryGetProperty("city", out JsonElement cityEl) ? (cityEl.GetString() ?? string.Empty).Trim() : string.Empty;
+
+                if (ret == 0 && string.Equals(country, "中国", StringComparison.Ordinal) &&
+                    (!string.IsNullOrEmpty(city) || !string.IsNullOrEmpty(province)))
+                {
+                    resultJson = JsonSerializer.Serialize(new
+                    {
+                        ok = true,
+                        reqId,
+                        country,
+                        province,
+                        city = !string.IsNullOrEmpty(city) ? city : province
+                    });
+                }
+            }
+        }
+        catch
+        {
+            // Fall back silently to JS global IP race.
+        }
+
+        if (!_disposed && _mainForm is not null)
+        {
+            await _mainForm.DeliverHostIpGeoAsync(resultJson);
         }
     }
 
