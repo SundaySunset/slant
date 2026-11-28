@@ -15,7 +15,7 @@
     <PublishSingleFile>true</PublishSingleFile>
     <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <Version>2.0.0</Version>
+    <Version>1.0.0</Version>
     <AssemblyTitle>寸度 · Slant</AssemblyTitle>
     <Company>Slant</Company>
     <Product>寸度 · Slant</Product>
